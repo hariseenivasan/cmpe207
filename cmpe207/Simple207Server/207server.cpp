@@ -49,14 +49,17 @@ int main(int argc, char**argv)
   ssock = accept_connection(msock, (struct sockaddr_in *) &clientaddr, clientlen);
   if (ssock < 0) 
     perror("ERROR on accept");
-  char buffer[10],converted[10];
-  int nr = recv_data(ssock,buffer,10,0);
-  printf("\nData Recieved: %d\n%s",nr,buffer);
-  int i;
-  for(i=0;i<nr;i++)
-    converted[i]=  toupper(buffer[i]);
+  char buffer[4000],converted[4000];
+  int nr = recv_data(ssock,buffer,sizeof(buffer),0);
+ // int i;
+ // for(i=0;i<3000;i++)
+ // printf("\nData Recieved: %d\n%s",buffer[i]);
+ int i;
+ for(i=0;i<nr;i++)
+   converted[i]=  toupper(buffer[i]);
   printf("\nConverted %s",converted);
-  send_data(ssock,converted,10,0);
- // toupper();
-//  close(ssock);
+   printf("\n\n");
+ send_data(ssock,converted,sizeof(converted),0);
+ //toupper();
+// close(ssock);
 }

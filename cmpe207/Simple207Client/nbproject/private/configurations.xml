@@ -25,6 +25,9 @@
       <runprofile version="9">
         <runcommandpicklist>
           <runcommandpicklistitem>"${OUTPUT_PATH}"</runcommandpicklistitem>
+          <runcommandpicklistitem>"${OUTPUT_PATH}" 10.185.173.110 2102</runcommandpicklistitem>
+          <runcommandpicklistitem>"${OUTPUT_PATH}" localhost 30000</runcommandpicklistitem>
+          <runcommandpicklistitem>"${OUTPUT_PATH}" 192.168.1.5 2102</runcommandpicklistitem>
           <runcommandpicklistitem>"${OUTPUT_PATH}" 127.0.0.1 30000</runcommandpicklistitem>
         </runcommandpicklist>
         <runcommand>"${OUTPUT_PATH}" 127.0.0.1 30000</runcommand>

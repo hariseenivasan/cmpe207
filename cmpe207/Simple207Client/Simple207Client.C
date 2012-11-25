@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdio.h>
+#include <ctype.h>
 int main(int argc, char**argv)
 {
    int sockfd,n;
@@ -40,15 +41,21 @@ int main(int argc, char**argv)
    
   // while (fgets(sendline, 10000,stdin) != NULL)
   // {
-   char* sendline="hari";
-      send_data(sockfd,sendline,10,0);
+   char sendline[4000];//="hari";
+   int i;
+   for(i=0;i<4000;i++)
+      sendline[i]=toascii((i%26)+97);
+   
+   printf("\n%s\n",sendline);
+      send_data(sockfd,sendline,sizeof(sendline),0);
       printf("\nData sent");
-      char buffer[10];
-       int nr = recv_data(sockfd,buffer,10,0);
-  printf("\nData Recievedfrom server: %d\n%s",nr,buffer);
- 
-   //   n=recv_data(sockfd,recvline,1000,0,NULL,NULL);
-    //  recvline[n]=0;
+      char buffer[4000];
+       int nr = recv_data(sockfd,buffer,sizeof(buffer),0);
+ printf("\nData Recievedfrom server: %d\n",nr);
+ printf("\n%s",buffer);
+ printf("\n\n");
+      //n=recv_data(sockfd,recvline,1000,0,NULL,NULL);
+     //recvline[n]=0;
     //  fputs(recvline,stdout);
   // }
 }

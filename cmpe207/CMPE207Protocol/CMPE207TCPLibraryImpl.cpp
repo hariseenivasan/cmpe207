@@ -4,7 +4,7 @@
  *
  * Created on October 28, 2012, 6:27 PM
  */
-
+#include <unistd.h>
 #include <cstdlib>
 #include <netinet/in.h>
 #include "CMPE207TCPLibrary.h"
@@ -15,6 +15,8 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <math.h>
+#include<iterator>
+
 #define NUMBER_OF_RETRANSMISSION 2
 using namespace std;
  struct connection{
@@ -140,6 +142,7 @@ int bind_socket(int sockfd, struct sockaddr_in * servaddr, socklen_t addrlen) {
         server.sin_family = AF_INET;
         server.sin_addr.s_addr = INADDR_ANY;
         server.sin_port = htons(mapUDPport(ntohs(servaddr->sin_port)));
+        printf("Bind: %d\n",ntohs(server.sin_port));
         status = bind (sockfd, (struct sockaddr *)&server, sizeof(server));        
     }
     
@@ -260,7 +263,7 @@ int accept_connection(int sockfd, struct sockaddr_in *remoteaddr, socklen_t addr
         printf("%s\n",inet_ntoa(clientaddr.sin_addr));
         syn_ack->syn=1;
         syn_ack->ack=1;
-        syn_ack->ackNum=syn_ack->seqNum+1;
+        syn_ack->ackNum=con.hdr207.seqNum+1;
         syn_ack->seqNum=sequenceNumber;
         
         syn_ack->sourcePort=con.hdr207.destPort;
@@ -309,7 +312,7 @@ int accept_connection(int sockfd, struct sockaddr_in *remoteaddr, socklen_t addr
                 memcpy(&connected_node.hdr207,syn_ack,sizeof(HDR_207));
                 memcpy(&connected_node.cliadd,&connected_client.cliadd,sizeof(connected_client.cliadd));
                 host_window_size=hdr->windowSize;
-                printf("Out of accept\n");
+                printf("Out of accept with host window size:%d\n",host_window_size);
                 return sockf;
             }
             else{
@@ -406,6 +409,7 @@ int connect_socket(int sockfd, struct sockaddr_in *remoteaddr, socklen_t addrlen
     memcpy(&connected_node.hdr207,&ackpacket,sizeof(ackpacket));
     memcpy(&connected_node.cliadd,&newservaddr,sizeof(newservaddr));
     host_window_size = synackpacket.windowSize;
+    
     return 0;
     }
     else{
@@ -416,55 +420,217 @@ int connect_socket(int sockfd, struct sockaddr_in *remoteaddr, socklen_t addrlen
 }
 
 /*
+ * close connection internal function
+ *
+ */
+
+int close_i(int sockfd) {
+
+    char buf_ack[HEADER_LEN_207TCP];
+    char buf_fin[HEADER_LEN_207TCP];
+    
+    HDR_207 *fin_hdr = newHDR_PTR();
+    HDR_207 *fin_ack_hdr = newHDR_PTR();
+    
+    socklen_t clientlen = sizeof(connected_node.cliadd);
+    
+    printf("\n Inside internal close_connection");
+    // send fin + ack
+    fin_hdr->fin = 1;
+    fin_hdr->ack = 1;
+    fin_hdr->sourcePort = sockfd; 
+    fin_hdr->destPort = connected_node.hdr207.sourcePort; 
+    printf("\nCreated FIN + ACK packet");
+    printheader(fin_hdr);
+
+    create_UDP_dat_ptr(buf_fin,NULL,0,fin_hdr);
+    
+    sendto(sockfd, &buf_fin, sizeof(buf_fin),0, 
+           (struct sockaddr*)&connected_node.cliadd, clientlen);
+    
+    // send ack
+    resetHeaderFlags(fin_hdr);
+    strcpy(buf_fin,"");
+    fin_hdr->ack = 1;
+    fin_hdr->sourcePort = sockfd; 
+    fin_hdr->destPort = connected_node.hdr207.sourcePort; 
+    printf("\nCreated ACK packet");
+    printheader(fin_hdr);
+
+    create_UDP_dat_ptr(buf_fin,NULL,0,fin_hdr);
+                
+    sendto(sockfd, &buf_fin, sizeof(buf_fin),0, 
+           (struct sockaddr*)&connected_node.cliadd, clientlen);
+
+    // receive ack
+    strcpy(buf_ack,"");
+    resetHeaderFlags(fin_ack_hdr);
+    recvfrom(sockfd, &buf_ack, sizeof(buf_ack),0,
+            (struct sockaddr*)&connected_node.cliadd, &clientlen);
+    get_hdr_dat_frm_Buff(fin_ack_hdr, NULL, (const char*)& buf_ack,
+                        sizeof(buf_ack));
+    if(fin_ack_hdr -> ack)
+    {
+
+            close(sockfd);
+    }
+}
+
+
+
+/*
+ * client - send FIN + ACK --->  server - receive FIN + ACK
+ *          receive FIN + ACK <--- send FIN + ACK
+ *          
+ *          send ACK ---> receive ACK
+ */
+
+int close_connection(int sockfd) {
+
+    char buf_ack[HEADER_LEN_207TCP];
+    char buf_fin[HEADER_LEN_207TCP];
+    
+    HDR_207 *fin_hdr = newHDR_PTR();
+    HDR_207 *fin_ack_hdr = newHDR_PTR();
+    
+    socklen_t clientlen = sizeof(connected_node.cliadd);
+    
+    printf("\n Inside close_connection");
+   
+      
+    // close connection is explicitely called by either client/server 
+    // send fin packet to other side
+    fin_hdr->fin = 1;
+    fin_hdr->sourcePort = sockfd; 
+    fin_hdr->destPort = connected_node.hdr207.sourcePort; 
+    printf("\nCreated FIN packet");
+    printheader(fin_hdr);
+
+    create_UDP_dat_ptr(buf_fin,NULL,0,fin_hdr);
+                
+    sendto(sockfd, &buf_fin, sizeof(buf_fin),0, 
+           (struct sockaddr*)&connected_node.cliadd, clientlen);
+    
+    // receive fin + ack from other side
+    
+    recvfrom(sockfd, &buf_ack, sizeof(buf_ack),0,
+            (struct sockaddr*)&connected_node.cliadd, &clientlen);
+    get_hdr_dat_frm_Buff(fin_ack_hdr, NULL, (const char*)& buf_ack,
+                        sizeof(buf_ack));
+    
+    // check if this header has fin + ack
+    if(fin_ack_hdr->ack && fin_ack_hdr->fin)
+    {
+        // send an ack packet
+        fin_ack_hdr->ack = 1;
+        fin_ack_hdr->sourcePort = sockfd; 
+        fin_ack_hdr->destPort = connected_node.hdr207.sourcePort;
+        printf("\nCreated Ack packet for FIN request");
+        printheader(fin_ack_hdr);
+    }
+    
+    //receive ack
+    resetHeaderFlags(fin_ack_hdr);    
+    recvfrom(sockfd, &buf_ack, sizeof(buf_ack),0,
+            (struct sockaddr*)&connected_node.cliadd, &clientlen);
+    get_hdr_dat_frm_Buff(fin_ack_hdr, NULL, (const char*)& buf_ack,
+                        sizeof(buf_ack));
+    
+    // check if this header has ack
+    if(fin_ack_hdr->ack)
+    {
+        // send an ack packet
+        fin_ack_hdr->ack = 1;
+        fin_ack_hdr->sourcePort = sockfd; 
+        fin_ack_hdr->destPort = connected_node.hdr207.sourcePort;
+        printf("\nCreated Ack packet for FIN request");
+        printheader(fin_ack_hdr);
+        
+        create_UDP_dat_ptr(buf_ack, NULL, 0, fin_ack_hdr);
+        sendto(sockfd, &buf_ack, sizeof(buf_ack),0,
+        (struct sockaddr*)&connected_node.cliadd, clientlen);
+    }
+    
+
+ }
+
+/*
  * Input parameters-
  *  sockfd is equal to CHILD socket number
  *  buf is data to be sent
  *  len is length of data 
  *  flags set to NOTUSED now
  */
+static int acktorecieve;
 ssize_t send_data(int sockfd, const void *buf, size_t len, int flags){
     printf("Send_data Enters\n");
-    static int acktorecieve;
+    int sentlen=0;
    /* if(memcmp(&connected_node,0,sizeof(connected_node)))
     {
         printf("Error: Connection Lost or it was never created. ");
         return -1;
         
     }*/
+    
     int i,iteration=0, retransmission=0;
     //Segmenting
-    int leastsize =(buffer_207_size<host_window_size)?buffer_207_size:host_window_size;
-    if(len>leastsize)    
-        iteration=ceil((float)len/(float)leastsize);
+    printf("Connected Node header:");
+    printheader(&connected_node.hdr207);
     
+    unsigned short leastsize=0 ;//=()?buffer_207_size:host_window_size;
+    printf("Buffer 207 size, host window size: %d,%d\n",buffer_207_size,host_window_size);
+    if((unsigned short)buffer_207_size<host_window_size)
+      leastsize=(unsigned short)buffer_207_size;
+    else
+       leastsize= host_window_size;
    
-         char* tempfragbuffer = (char *)malloc(leastsize);
-        for(i=0;i<=iteration ;i++){
-       
-           
-            memcpy(tempfragbuffer,buf+(i*(buffer_207_size)),buffer_207_size);
-            
-            buffer_207[acktorecieve] = tempfragbuffer;
-         //Send and recieve the buffer   
-        char* buffertosend = (char*)malloc(leastsize+20);
-    create_UDP_dat_ptr(buffertosend,(const char*)tempfragbuffer,leastsize,&connected_node.hdr207);
-    HDR_207 headertosend;
-    copyHeader(&headertosend,&connected_node.hdr207);
-    resetHeaderFlags(&headertosend);
+    unsigned short s=(int)len;
+    printf("Least Size Chosen: %d, len: %d\n",leastsize,s);
     
-    printheader(&headertosend);
-    //headertosend.ackNum++;
-    //headertosend.seqNum++;
+    int sizetoget=s;
+    if(((int)s)>((int)leastsize)){ 
+        printf("Least Size Im here\n");
+         sizetoget=leastsize;
+        iteration=((float)len/(float)leastsize);
+    }
+    
+    //Not required for else because iteration is 0 in for it checks for i<=0
+   printf("Least Size Chosen: %d",iteration);
+        char* tempfragbuffer = (char *)malloc(leastsize);
+    
+        
+     for(i=0;i<iteration ;i++){
+       
+            
+            memcpy(tempfragbuffer,(char *)(buf+(i*(buffer_207_size))),sizetoget);
+                        
+            buffer_207[acktorecieve] = tempfragbuffer;
+         
+            //Send and recieve the buffer   
+        char* buffertosend = (char*)malloc(leastsize+20);
+        create_UDP_dat_ptr(buffertosend,(const char*)tempfragbuffer,leastsize,&connected_node.hdr207);
+        
+        HDR_207 headertosend;
+        
+        copyHeader(&headertosend,&connected_node.hdr207);
+        resetHeaderFlags(&headertosend);
+    
+     //headertosend.ackNum=connected_node.hdr207+leastsize;
+    
+    
     printf("\nHeader to send created:");
     printheader(&headertosend);
+    
     sendto(sockfd, buffertosend,leastsize+20, 0, (const struct sockaddr*)&connected_node.cliadd,sizeof(connected_node.cliadd));
     printf("Data Sent with above header\n");
+    
     acktorecieve=headertosend.seqNum+leastsize;
-    free(buffertosend);
+    //free(buffertosend);
     struct sockaddr_in ackserver;
     HDR_207 ackpacket;
     buffertosend = (char*)malloc(20);
     socklen_t ackserversoclen=sizeof(ackserver);
+    
     recvfrom(sockfd, buffertosend,20, 0, ( struct sockaddr*)&ackserver,&ackserversoclen);
     printf("ACK recieved\n");
     
@@ -482,22 +648,26 @@ ssize_t send_data(int sockfd, const void *buf, size_t len, int flags){
     printheader(&ackpacket);
     if((ackpacket.ack) )
     {
-        if(ackpacket.ackNum==acktorecieve)
-        return len;
+        if(ackpacket.ackNum==acktorecieve){
+            sentlen+=leastsize;
+        headertosend.seqNum=ackpacket.ackNum; //Next header for the packet  
+        headertosend.ackNum=ackpacket.seqNum+1;
+        }
+        else{
         retransmission++;
         if(retransmission>NUMBER_OF_RETRANSMISSION)
             return -1;
         i--;
-        continue;
+        continue;}
     }
-    memcpy(&connected_node.hdr207,&headertosend,sizeof(headertosend));
-    return -1;
+    copyHeader (&connected_node.hdr207,&headertosend);
+    
             
             
         }
     
     //
-    
+        return sentlen;
     
 }
 
@@ -508,16 +678,23 @@ ssize_t send_data(int sockfd, const void *buf, size_t len, int flags){
 
 
 ssize_t recv_data(int sockfd, void *buf, size_t len, int flags){
+  //NOTE which is used in the hashmap to predict the next contegues data that has to come.
     printf("Recv_Data enters");
+    buffer_207.clear();
+    int buffersize=0;
+    char * bufrecieved=(char*)malloc(len);;
     struct sockaddr_in cliaddr;
-    
-  
+     
+     
     char buff[20+len];
     HDR_207 * hdr=newHDR_PTR();
+    
+    
     HDR_207 * send_hdr=&connected_node.hdr207;
+   
+    
+    do{
     resetHeaderFlags(send_hdr);
-    
-    
      socklen_t clilen = sizeof(cliaddr);
      
      int n = recvfrom(sockfd, &buff, HEADER_LEN_207TCP+len,0, (struct sockaddr *)& cliaddr, &clilen);
@@ -532,7 +709,7 @@ ssize_t recv_data(int sockfd, void *buf, size_t len, int flags){
      printf("Port Number:%d",portn);
    
     
-   if(!(portn ==  ntohs(connected_node.cliadd.sin_port)) && !strcmp(inet_ntoa( cliaddr.sin_addr), inet_ntoa(connected_node.cliadd.sin_addr)))
+    if(!(portn ==  ntohs(connected_node.cliadd.sin_port)) && !strcmp(inet_ntoa( cliaddr.sin_addr), inet_ntoa(connected_node.cliadd.sin_addr)))
      { 
          printf("Not from the desiered client!!");
          return -1;
@@ -544,6 +721,7 @@ ssize_t recv_data(int sockfd, void *buf, size_t len, int flags){
             return -1;
         printf("\nThe header retrieved from is:");
         printheader(hdr);
+        
         printf("\n inside receive:Get header data from buffer %d",rc );
         if(hdr->ackNum=connected_node.hdr207.seqNum+1)
         {
@@ -551,20 +729,56 @@ ssize_t recv_data(int sockfd, void *buf, size_t len, int flags){
             send_hdr->ackNum=hdr->seqNum+data_size;
             send_hdr->seqNum=hdr->ackNum;
             send_hdr->ack=1;
+            //send_hdr->windowSize=(buffer_207.co()*buffer_207_size)-(buffer_207.size()*buffer_207_size);
             char sendbuff[20];
             create_UDP_dat_ptr(&sendbuff,NULL,0,send_hdr);
             printf("ACK prepared for data:");
             printheader(send_hdr);
+            char* hashbuff=(char*) malloc(data_size);
+                 memcpy(hashbuff,data,data_size);
+        
+        
+                if(buffer_207.empty())
+                  buffer_207[hdr->seqNum]=hashbuff;
+                else            
+                        if(!(buffer_207[ hdr->seqNum]==NULL))
+                                buffer_207[hdr->seqNum]=hashbuff;
+                        
+        
             sendto(sockfd, &sendbuff, HEADER_LEN_207TCP,0, (const struct sockaddr *)& cliaddr, clilen);
             printf("sent ack back");
-          // printf("\n data obtained is:%s",sendbuff);
-            memcpy(buf,data,data_size);
-            return data_size;
+            buffersize=buffersize+data_size;
+            printf("\n data obtained is:%s",sendbuff);
+            memcpy(bufrecieved,data,data_size);
+            bufrecieved=bufrecieved+data_size;
+            copyHeader(&connected_node.hdr207,hdr);
+            //return data_size;
         }
-    
-    
+    }while(buffersize<len);
+    bufrecieved=bufrecieved-buffersize;
+    memcpy(buf,bufrecieved,buffersize);
+    return buffersize;
+  /*  map<int,char *>::const_iterator it ;
+    int i=0;
+     for( it==buffer_207.begin();it!=buffer_207.end();it++)
+    {
+   // cout << (char*)it->second;
+     memcpy(buf+(i*buffer_207_size),it->second,buffer_207_size);
+     i++;
+    }*/
         return -1;
      
+}
+
+int recv_check_fin(int sockfd, void *buf, size_t len, int flags, sockaddr* node_address, socklen_t* node_address_len){
+int rc;    
+rc = recvfrom( sockfd,  buf,  len,  flags,  node_address, node_address_len);
+HDR_207 * fin_packet=newHDR_PTR();
+
+rc=get_hdr_dat_frm_Buff(fin_packet,NULL,(const char*)&buf,20);
+if(fin_packet->fin)
+    close_i(sockfd);
+
 }
 /*int main(int argc, char** argv) {
 
