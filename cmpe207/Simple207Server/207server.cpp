@@ -54,12 +54,12 @@ int main(int argc, char**argv)
  // int i;
  // for(i=0;i<3000;i++)
  // printf("\nData Recieved: %d\n%s",buffer[i]);
- int i;
+/* int i;
  for(i=0;i<nr;i++)
    converted[i]=  toupper(buffer[i]);
   printf("\nConverted %s",converted);
    printf("\n\n");
- send_data(ssock,converted,sizeof(converted),0);
- //toupper();
+// send_data(ssock,converted,sizeof(converted),0);
+ //toupper();*/
 // close(ssock);
 }

@@ -134,6 +134,7 @@ ssize_t send_data(int sockfd, const void *buf, size_t len, int flags);
 ssize_t recv_data(int sockfd, void *buf, size_t len, int flags);
 
 
+int close_connection(int sockfd);
 #ifdef	__cplusplus
 }
 #endif
