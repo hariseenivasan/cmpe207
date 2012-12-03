@@ -1,6 +1,6 @@
-/* 
+/** 
  * File:   CMPE207Header.h
- * Author: root
+ *
  *
  * Created on October 28, 2012, 6:37 PM
  */

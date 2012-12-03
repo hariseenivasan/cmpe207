@@ -1,6 +1,6 @@
 /* 
  * File:   dataParser.h
- * Author: srihariharan
+ * Author: Sri Hari Haran
  *
  * Created on October 31, 2012, 9:40 PM
  */
