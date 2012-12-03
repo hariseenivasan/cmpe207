@@ -93,7 +93,7 @@ void resetHeaderFlags(HDR_207* hdr){
 void printheader(HDR_207 * hdr)
 {
     if(hdr!=NULL)
-        printf("\n%d\t%d \n%d\n%d\n%d %d %d %d %d syn:%d %d\t%d\n%d\t%d\n", hdr->sourcePort,
+        printf("\nSRC PORT:%d\tDEST PORT:%d \nSEQ NO.:%d\nACK NO.:%d\nHEX10:%d URG:%d ACK:%d PSH:%d RST:%d SYN:%d FIN:%d\tWND SIZE:%d\nCHECKSUM:%d\tURG PTR:%d\n", hdr->sourcePort,
           hdr->destPort,     
           hdr->seqNum,
           hdr->ackNum,      
@@ -243,7 +243,7 @@ int seqnumber;
 int accept_connection(int sockfd, struct sockaddr_in *remoteaddr, socklen_t addrlen) {
     // CHECK!! When you reset, you must have poped out the client from listen queue.
     printf("Accept Entered");
-    unsigned short int sequenceNumber=0; //make it random afterwards
+    unsigned  int sequenceNumber=( unsigned  int)rand(); //make it random afterwards
 //    int i = 0;
 //    acceptQ [activeConnections] = pendingQ[i];
 //    activeConnections ++;
@@ -274,6 +274,7 @@ int accept_connection(int sockfd, struct sockaddr_in *remoteaddr, socklen_t addr
         syn_ack->syn=1;
         syn_ack->ack=1;
         syn_ack->ackNum=con.hdr207.seqNum+1;
+        
         syn_ack->seqNum=sequenceNumber;
         
         syn_ack->sourcePort=con.hdr207.destPort;
@@ -349,7 +350,7 @@ int connect_socket(int sockfd, struct sockaddr_in *remoteaddr, socklen_t addrlen
     HDR_207 synpacket=*newHDR_PTR();
     printheader(&synpacket);
     static unsigned short int random_207sourceport=rand();
-    unsigned short int sequenceNumber=0;//rand();
+    unsigned  int sequenceNumber= (unsigned  int)rand();//rand();
     
     synpacket.syn=1;
     synpacket.sourcePort=random_207sourceport;
@@ -598,28 +599,26 @@ ssize_t send_data(int sockfd, const void *buf, size_t len, int flags){
     
     int i,iteration=0, retransmission=0;
     //Segmenting
-    printf("Connected Node header:");
+    printf("\nConnected Node header:");
     printheader(&connected_node.hdr207);
     
     unsigned short leastsize=0 ;//=()?buffer_207_size:host_window_size;
-    printf("Buffer 207 size, host window size: %d,%d\n",buffer_207_size,host_window_size);
+    printf("\nBuffer 207 size, host window size: %d,%d\n",buffer_207_size,host_window_size);
     if((unsigned short)buffer_207_size<host_window_size)
       leastsize=(unsigned short)buffer_207_size;
     else
        leastsize= host_window_size;
    
     unsigned short s=(int)len;
-    printf("Least Size Chosen: %d, len: %d\n",leastsize,s);
-    
     int sizetoget=s;
     if(((int)s)>((int)leastsize)){ 
-        printf("Least Size Im here\n");
+       
          sizetoget=leastsize;
         iteration=((float)len/(float)leastsize);
     }
     
     //Not required for else because iteration is 0 in for it checks for i<=0
-   printf("Least Size Chosen: %d",iteration);
+   printf("Least Size Chosen: %d,len: %d\n",iteration,s);
         char* tempfragbuffer = (char *)malloc(leastsize);
     
         
@@ -646,7 +645,7 @@ ssize_t send_data(int sockfd, const void *buf, size_t len, int flags){
     printheader(&headertosend);
     
     sendto(sockfd, buffertosend,leastsize+20, 0, (const struct sockaddr*)&connected_node.cliadd,sizeof(connected_node.cliadd));
-    printf("Data Sent with above header\n");
+    printf("\nData Sent with above header\n");
     
     acktorecieve=headertosend.seqNum+leastsize;
     //free(buffertosend);
@@ -656,12 +655,12 @@ ssize_t send_data(int sockfd, const void *buf, size_t len, int flags){
     socklen_t ackserversoclen=sizeof(ackserver);
     
     recvfrom(sockfd, buffertosend,20, 0, ( struct sockaddr*)&ackserver,&ackserversoclen);
-    printf("ACK recieved\n");
+    printf("\nACK recieved\n");
     
     //PROBLEM!!!! WHILE USING NETWORK.
     if(memcmp(&ackserver,&connected_node.cliadd,sizeof(connected_node.cliadd)))
     { 
-        printf("ERROR: ACK FROM DIFFERENT SERVER!!! ");
+        //printf("ERROR: ACK FROM DIFFERENT SERVER!!! ");
         return -1;
     }
     
@@ -715,7 +714,7 @@ ssize_t recv_data(int sockfd, void *buf, size_t len, int flags){
     resetHeaderFlags(send_hdr);
      socklen_t clilen = sizeof(cliaddr);
      int n = recv_check_fin(sockfd, &buff, HEADER_LEN_207TCP+len,0, (struct sockaddr *)& cliaddr, &clilen);
-     printf("Recieved data: %d",n);
+     printf("Received data packet: %d",n);
      if(n==FIN_SENT){
          return -1;
      }
@@ -725,10 +724,10 @@ ssize_t recv_data(int sockfd, void *buf, size_t len, int flags){
          return -1;
      } 
      int portn=ntohs(cliaddr.sin_port);
-     printf("Port Number:%d",portn);
+     printf("Received at Port Number:%d",portn);
     if(!(portn ==  ntohs(connected_node.cliadd.sin_port)) && !strcmp(inet_ntoa( cliaddr.sin_addr), inet_ntoa(connected_node.cliadd.sin_addr)))
      { 
-         printf("Not from the desiered client!!");
+         printf("Not from the desired client!!");
          return -1;
      }
      const int data_size=n-sizeof(HDR_207);
@@ -751,7 +750,8 @@ ssize_t recv_data(int sockfd, void *buf, size_t len, int flags){
             create_UDP_dat_ptr(&sendbuff,NULL,0,send_hdr);
             printf("ACK prepared for data:");
             printheader(send_hdr);
-            char* hashbuff=(char*) malloc(data_size);
+            /*Future
+             * char* hashbuff=(char*) malloc(data_size);
                  memcpy(hashbuff,data,data_size);
                 if(buffer_207.empty())
                   buffer_207[hdr->seqNum]=hashbuff;
@@ -759,14 +759,13 @@ ssize_t recv_data(int sockfd, void *buf, size_t len, int flags){
                         if(!(buffer_207[ hdr->seqNum]==NULL))
                                 buffer_207[hdr->seqNum]=hashbuff;
                         
-        
+        */
             sendto(sockfd, &sendbuff, HEADER_LEN_207TCP,0, (const struct sockaddr *)& cliaddr, clilen);
-            printf("sent ack back");
+            printf("Sent ACK back");
             buffersize=buffersize+data_size;
-            printf("\n data obtained is:%s",sendbuff);
             memcpy(bufrecieved,data,data_size);
             bufrecieved=bufrecieved+data_size;
-            copyHeader(&connected_node.hdr207,hdr);
+            copyHeader(&connected_node.hdr207,send_hdr);
             //return data_size;
         }
     }while(buffersize<len);
@@ -788,7 +787,7 @@ ssize_t recv_data(int sockfd, void *buf, size_t len, int flags){
 
 int recv_check_fin(int sockfd, void *buf, size_t len, int flags,struct sockaddr* node_address, socklen_t* node_address_len){
 int rc, n;
-printf("Recieve Check fin enters\n");
+printf("\nRecieve Check fin enters\n");
 n = recvfrom( sockfd, buf, len, flags, node_address, node_address_len);
 if(n < 0)
     return n;
@@ -798,12 +797,14 @@ rc=get_hdr_dat_frm_Buff(fin_packet,buff,(const char*)buf,20);
 if(rc<0)
     return rc;
 
-printf("Recieved packet:\n");
-printheader(fin_packet);
 
 if(fin_packet->fin)
    
-{printf("It is a FIN packet\n");
+{
+    printf("Recieved packet is FIN:\n");
+    printheader(fin_packet);
+
+    
     close_i(sockfd,fin_packet);
 return FIN_SENT;
 }
@@ -812,7 +813,7 @@ return n;
 }
 void sigcatcher(int sig) {
 
-    printf("No data from client, caught %d signal", sig);
+    printf("\nRecv No Data Encountered, exiting blocking state\n", sig);
 }
 
 int wrapper_recvfrom(int sockfd, void *buf, size_t len, int flags,
